@@ -1,0 +1,163 @@
+---
+title: "Coding2"
+author: "Marc Secasan"
+date: "2024-11-08"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+1a
+```{R}
+set.seed(456)
+n <- 10
+x <- rnorm(n)
+
+cat(x)
+```
+1b
+```{R}
+xhundred <- rnorm(100)
+hist(xhundred)
+
+xthousand <- rnorm(1000)
+hist(xthousand)
+
+xten <- rnorm(10000)
+hist(xten)
+```
+1c
+```{R}
+
+n_values <- c(1, 10, 100)  
+N <- 10000  
+
+  
+lambda <- 2  # Mean of Poisson
+
+# Function to generate Zn samples
+generate_Zn <- function(n, lambda, N) {
+  X <- matrix(rpois(N * n, lambda), ncol = n)
+  X_bar <- rowMeans(X)
+  Zn <- sqrt(n) * (X_bar - lambda) / sqrt(lambda)
+  return(Zn)
+}
+
+
+Zn_1 <- generate_Zn(1, lambda, N)
+Zn_10 <- generate_Zn(10, lambda, N)
+Zn_100 <- generate_Zn(100, lambda, N)
+
+
+par(mfrow = c(1, 3))  
+
+
+hist(Zn_1, main = "Zn for n = 1", xlab = "Zn", probability = TRUE)
+
+
+hist(Zn_10, main = "Zn for n = 10", xlab = "Zn", probability = TRUE)
+
+
+hist(Zn_100, main = "Zn for n = 100", xlab = "Zn", probability = TRUE)
+
+
+```
+2a
+```{R}
+data <- read.csv("GermanData.csv")
+head(data)
+
+
+cat("Job values:", unique(data$Job), "\n")
+hist(data$Job, main = "Histogram of Job", xlab = "Job (Numeric Values)",)
+
+```
+2b
+```{R}
+job1 <- data[data$Job == 1, ]
+head(job1)
+
+print(var(job1$Credit.amount))
+hist(job1$Credit.amount)
+EY <- sum(job1$Credit.amount) / nrow(job1)
+SD <- (job1$Credit.amount - EY)^2
+SSD <- sum(SD)
+
+sample_variance <- SSD / (nrow(job1) - 1)
+
+cat("Sample Mean (EY):", EY, "\n")
+cat("Sum of Squared Differences (SSD):", SSD, "\n")
+cat("Sample Variance:", sample_variance, "\n")
+
+```
+2c
+
+```{R}
+hist(data$Credit.amount, 
+     main = "Comparison of Credit Amount Distributions", 
+     xlab = "Credit Amount", 
+     col = rgb(0, 0, 1, 0.5),  
+     xlim = c(min(data$Credit.amount), max(data$Credit.amount)),  
+     breaks = 20,  
+     freq = FALSE)  
+
+hist(job1$Credit.amount, 
+     col = rgb(0, 1, 0, 0.5), 
+     add = TRUE,  
+     breaks = 20,  
+     freq = FALSE)  
+
+legend("topright", 
+       legend = c("P(Y = y)", "P(Y = y | X = 1)"), 
+       fill = c(rgb(0, 0, 1, 0.5), rgb(0, 1, 0, 0.5)))
+```
+Because the distribution P(Y = y) is mostly the same as P(Y = y|x), we can assume that knowing the value of X has 
+no effect on the value of Y. Therefore they are likely independent samples.
+
+2d
+```{R}
+cov(data$Job, data$Credit.amount)
+cor(data$Job, data$Credit.amount)  
+cat("Covariance: ", cov(data$Job, data$Credit.amount), "\n", "Correlation: ", cor(data$Job, data$Credit.amount), "\n")
+
+```
+2e
+```{R}
+data_sub <- data[c("Age", "Job", "Credit.amount", "Duration")]
+
+cov_matrix <- cov(data_sub)
+
+cor_matrix <- cor(data_sub)
+
+cat("Covariance Matrix:\n")
+print(cov_matrix)
+
+cat("\nCorrelation Matrix:\n")
+print(cor_matrix)
+
+```
+The most correlated variables are credit amount and duration.
+3
+```{R}
+hist(data$Age)
+
+#sample mean and sample variance are the best point estimators for the mean and variance
+mean_age <- mean(data$Age)
+variance_age <- var(data$Age)
+
+cat("Sample Mean of Age:", mean_age, "\n")
+cat("Sample Variance of Age:", variance_age, "\n")
+
+mean_age <- mean(data$Age)
+sd_age <- sd(data$Age)
+n <- length(data$Age)
+SE_age <- sd_age / sqrt(n)
+z_critical <- 1.96
+CI_lower <- mean_age - z_critical * SE_age
+CI_upper <- mean_age + z_critical * SE_age
+cat("95% Confidence Interval for the population mean Age:\n")
+cat("[", CI_lower, ",", CI_upper, "]\n")
+```
+
+
