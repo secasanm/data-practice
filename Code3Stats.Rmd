@@ -1,0 +1,231 @@
+---
+title: "Code3Stats"
+author: "Marc Secasan"
+date: "2024-12-10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+house_data <- read.csv("house_pricing.csv")
+
+```
+
+Q1
+```{R}
+
+# 1.1 Preprocessing: Convert logical data to numeric and select the first 50 rows
+house_data <- house_data %>%
+  mutate(across(where(is.logical), as.numeric))  # Convert logical columns to numeric
+
+house_data_50 <- house_data[1:50, ]  # Select the first 50 rows
+
+# Display first 5 rows of the dataset
+head(house_data_50, 5)
+
+# 1.2 Construct Matrix X for Linear Regression
+X <- house_data_50 %>%
+  select(-price, -date) %>%
+  mutate(intercept = 1) %>%
+  as.matrix()
+
+# Display first 5 rows of X matrix
+head(X, 5)
+
+# 1.3 Construct Vector y for Linear Regression (Price)
+y <- as.matrix(house_data_50$price)
+
+# Display first 5 rows of y vector
+head(y, 5)
+
+# 1.4 Solve the Linear System (X'X)β = X'y to obtain coefficients
+beta <- solve(t(X) %*% X, t(X) %*% y)
+
+# Display the resulting coefficients
+beta
+
+
+```
+
+Q2
+```{R}
+house_data <- house_data %>%
+  mutate(across(where(is.logical), as.numeric))  # Convert logical columns to numeric
+
+train_set <- house_data[1:50, ]  # Training set (first 50 rows)
+test_set <- house_data[51:6700, ]  # Test set (remaining rows)
+
+#Remove 'date' column from both training and test sets
+train_set <- train_set %>% select(-date)
+test_set <- test_set %>% select(-date)
+
+#Display first 5 rows of the test data (for debugging purposes)
+head(test_set, 5)
+
+#Linear Regression with lm() on training data
+train_model <- lm(price ~ ., data = train_set)  # Train model using remaining columns
+
+#Coefficients from the linear model
+summary(train_model)$coefficients
+
+#Compute MSE for Training and Test Data
+train_predictions <- predict(train_model, newdata = train_set)
+test_predictions <- predict(train_model, newdata = test_set)
+
+#Calculate MSE (Mean Squared Error) for training and test data
+train_mse <- mean(((train_set$price - train_predictions)^2) / (train_set$price^2))
+test_mse <- mean(((test_set$price - test_predictions)^2) / (test_set$price^2))
+
+#Display MSE values
+cat("Training MSE:", train_mse, "\nTest MSE:", test_mse)
+
+
+
+#Covariance Matrix and Eigen-Decomposition
+cov_matrix <- cov(train_set %>% select(-price))  # Exclude the 'price' column
+
+#Display the covariance matrix
+print(cov_matrix)
+
+#Perform Eigen-Decomposition of the covariance matrix
+eigen_decomp <- eigen(cov_matrix)
+
+#Display eigenvalues and eigenvectors
+eigenvalues <- eigen_decomp$values
+eigenvectors <- eigen_decomp$vectors
+
+#Display eigenvalues and eigenvectors as tables
+cat("Eigenvalues:\n", eigenvalues, "\n")
+cat("Eigenvectors:\n")
+print(eigenvectors)
+#Significance of Attributes (using first eigenvector)
+first_eigenvector <- eigen_decomp$vectors[, 1]
+
+#Display the attribute with the largest absolute value in the first eigenvector
+max_index <- which.max(abs(first_eigenvector))
+colnames(train_set)[max_index]
+
+#Dimension Reduction - Retain the first three components (PCA)
+
+#Select the columns excluding 'price' and compute the principal components
+V_hat <- eigen_decomp$vectors[, 1:3]  # Retain first three eigenvectors
+
+#Calculate the principal components for training data (X_training)
+X_training <- as.matrix(train_set %>% select(-price))  # Only exclude 'price' column
+
+#Perform the projection of training data onto the first three eigenvectors
+Z_training <- X_training %*% V_hat  # Principal components for training data
+
+#Repeat the same process for the test data (X_test)
+X_test <- as.matrix(test_set %>% select(-price))  # Only exclude 'price' column
+Z_test <- X_test %*% V_hat  # Principal components for test data
+
+# Display the first 5 rows of Z_training and Z_test
+cat("First 5 rows of Z_training:\n")
+print(head(Z_training, 5))
+
+cat("\nFirst 5 rows of Z_test:\n")
+print(head(Z_test, 5))
+
+
+#Re-run Linear Regression on Principal Components and calculate MSE
+train_model_pca <- lm(price ~ Z_training[, 1] + Z_training[, 2] + Z_training[, 3], data = train_set)
+test_model_pca <- lm(price ~ Z_test[, 1] + Z_test[, 2] + Z_test[, 3], data = test_set)
+
+train_predictions_pca <- predict(train_model_pca, train_set)
+test_predictions_pca <- predict(test_model_pca, test_set)
+
+train_mse_pca <- mean(((train_set$price - train_predictions_pca)^2) / (train_set$price^2))
+test_mse_pca <- mean(((test_set$price - test_predictions_pca)^2) / (test_set$price^2))
+
+# Display updated MSE values after PCA
+cat("Training MSE after PCA:", train_mse_pca, "\nTest MSE after PCA:", test_mse_pca)
+
+# Comparison of MSE before and after PCA
+cat("MSE comparison: Before PCA (Train:", train_mse, "Test:", test_mse, ") vs After PCA (Train:", train_mse_pca, "Test:", test_mse_pca, ")\n")
+
+```
+
+Q3
+```{R}
+# Load the data
+cluster_data <- read.csv("cluster_data.csv")
+
+# Visualize the Data Points
+ggplot(cluster_data, aes(x = V1, y = V2)) +
+  geom_point() +
+  labs(title = "Data Points Visualization", x = "V1", y = "V2") +
+  theme_minimal()
+
+# K-means Clustering without using the built-in kmeans() function
+set.seed(456)  # For reproducibility
+
+# Assuming your dataset has columns V1 and V2
+data <- cluster_data[, c("V1", "V2")]
+
+# Initialize centroids randomly (choose 3 random points as initial centroids)
+K <- 3
+initial_centroids <- data[sample(1:nrow(data), K), ]
+
+# Function to compute Euclidean distance
+euclidean_distance <- function(a, b) {
+  sqrt(sum((a - b)^2))
+}
+
+# E-step: Assign each point to the closest centroid
+assign_clusters <- function(data, centroids) {
+  clusters <- numeric(nrow(data))
+  for (i in 1:nrow(data)) {
+    distances <- apply(centroids, 1, function(centroid) euclidean_distance(data[i,], centroid))
+    clusters[i] <- which.min(distances)
+  }
+  return(clusters)
+}
+
+# M-step: Recompute centroids as the mean of assigned points
+update_centroids <- function(data, clusters, K) {
+  new_centroids <- matrix(NA, nrow = K, ncol = ncol(data))
+  for (k in 1:K) {
+    cluster_points <- data[clusters == k, ]
+    new_centroids[k, ] <- colMeans(cluster_points, na.rm = TRUE)
+  }
+  return(new_centroids)
+}
+
+# K-means algorithm for 4 rounds (E-M-E-M-E-M)
+centroids <- initial_centroids
+for (round in 1:4) {
+  # E-step: Assign clusters
+  clusters <- assign_clusters(data, centroids)
+  
+  # M-step: Update centroids
+  centroids <- update_centroids(data, clusters, K)
+  
+  # Optionally, print objective function J (sum of squared distances)
+  J <- sum(sapply(1:nrow(data), function(i) euclidean_distance(data[i, ], centroids[clusters[i], ])^2))
+  cat("Round", round, "Objective function J:", J, "\n")
+}
+
+# Visualize the result after 4 rounds
+ggplot(cluster_data, aes(x = V1, y = V2, color = factor(clusters))) +
+  geom_point() +
+  geom_point(data = as.data.frame(centroids), aes(x = V1, y = V2), color = "red", size = 5, shape = 3) +
+  labs(title = "K-means Clustering after 4 Rounds", x = "V1", y = "V2") +
+  theme_minimal()
+
+# K-means Clustering using the built-in kmeans() function
+kmeans_result <- kmeans(data, centers = 3)
+
+# Visualize the result using ggplot
+ggplot(cluster_data, aes(x = V1, y = V2, color = factor(kmeans_result$cluster))) +
+  geom_point() +
+  geom_point(data = as.data.frame(kmeans_result$centers), aes(x = V1, y = V2), color = "red", size = 5, shape = 3) +
+  labs(title = "K-means Clustering using built-in kmeans()", x = "V1", y = "V2") +
+  theme_minimal()
+```
+
+
+

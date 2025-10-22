@@ -1,0 +1,219 @@
+---
+title: "DataVisR"
+author: "Marc Secasan"
+date: "2024-11-05"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Q1
+```{R}
+getwd()
+setwd("~/Desktop/R")
+data <- read.csv("CarSales.csv")
+head(data)
+```
+Q2
+```{R g.width=13, fig.height=8}
+
+
+avg_data <- aggregate(cbind(SalePrice, CostPrice, LaborCost, SpareParts) ~ Make, data = data, FUN = mean)
+
+par(mfrow = c(2, 2), mar = c(5, 5, 2, 2))  
+
+plot(avg_data$SalePrice, avg_data$CostPrice, 
+     pch = 16, col = "blue", 
+     xlab = expression(italic("Average Sale Price (K)")), 
+     ylab = expression(italic("Average Cost (K)")),
+     main = "Avg Sale Price vs Avg Cost",
+     xlim = c(min(avg_data$SalePrice) * 0.9, max(avg_data$SalePrice) * 1.1), 
+     ylim = c(min(avg_data$CostPrice) * 0.9, max(avg_data$CostPrice) * 1.1))
+
+abline(lm(avg_data$CostPrice ~ avg_data$SalePrice), col = "black", lwd = 2)
+
+abline(h = mean(avg_data$CostPrice), col = "red", lty = 2, lwd = 2)
+abline(v = mean(avg_data$SalePrice), col = "red", lty = 2, lwd = 2)
+
+
+plot(avg_data$SalePrice, avg_data$LaborCost, 
+     pch = 15, col = "blue", 
+     xlab = expression(italic("Average Sale Price (K)")), 
+     ylab = expression(italic("Average Labor Cost (K)")),
+     main = "Avg Sale Price vs Avg Labor Cost",
+     xlim = c(min(avg_data$SalePrice) * 0.9, max(avg_data$SalePrice) * 1.1), 
+     ylim = c(min(avg_data$LaborCost) * 0.9, max(avg_data$LaborCost) * 1.1))
+
+abline(lm(avg_data$LaborCost ~ avg_data$SalePrice), col = "black", lwd = 2)
+
+abline(h = mean(avg_data$LaborCost), col = "red", lty = 2, lwd = 2)
+abline(v = mean(avg_data$SalePrice), col = "red", lty = 2, lwd = 2)
+
+text(avg_data$SalePrice, avg_data$LaborCost, labels = avg_data$Make, pos = 4, col = "red", cex = 0.8)
+
+plot(avg_data$SalePrice, avg_data$SpareParts, 
+     pch = 17, col = "blue", 
+     xlab = expression(italic("Average Sale Price (K)")), 
+     ylab = expression(italic("Average Spare Parts Cost (K)")),
+     main = "Avg Sale Price vs Spare Parts Cost",
+     xlim = c(min(avg_data$SalePrice) * 0.9, max(avg_data$SalePrice) * 1.1), 
+     ylim = c(min(avg_data$SpareParts) * 0.9, max(avg_data$SpareParts) * 1.1))
+
+abline(lm(avg_data$SpareParts ~ avg_data$SalePrice), col = "black", lwd = 2)
+
+abline(h = mean(avg_data$SpareParts), col = "red", lty = 2, lwd = 2)
+abline(v = mean(avg_data$SalePrice), col = "red", lty = 2, lwd = 2)
+
+text(avg_data$SalePrice, avg_data$SpareParts, labels = avg_data$Make, pos = 4, col = "red", cex = 0.8)
+
+plot(avg_data$LaborCost, avg_data$SpareParts, 
+     pch = 16, col = "blue", 
+     xlab = expression(italic("Average Labor Cost (K)")), 
+     ylab = expression(italic("Average Spare Parts Cost (K)")),
+     main = "Avg Labor Cost vs Spare Parts Cost",
+     xlim = c(min(avg_data$LaborCost) * 0.9, max(avg_data$LaborCost) * 1.1), 
+     ylim = c(min(avg_data$SpareParts) * 0.9, max(avg_data$SpareParts) * 1.1))
+
+abline(lm(avg_data$SpareParts ~ avg_data$LaborCost), col = "black", lwd = 2)
+
+abline(h = mean(avg_data$SpareParts), col = "red", lty = 2, lwd = 2)
+abline(v = mean(avg_data$LaborCost), col = "red", lty = 2, lwd = 2)
+
+text(avg_data$LaborCost, avg_data$SpareParts, labels = avg_data$Make, pos = 3, col = "red", cex = 0.8)
+
+
+```
+
+Q3
+```{R}
+avgsales <- aggregate(SalePrice ~ Make, data = data, FUN = mean)
+print(avgsales)
+bp <- barplot(avgsales$SalePrice, col = colors(), names.arg = avgsales$Make, horiz = TRUE, main = "Average Sales by Car Make",xlab = "Average Sales", 
+        las = 1, cex.names = 0.8, axes = FALSE)
+
+axis(1, 
+     at = seq(0, max(avgsales$SalePrice), by = 10000),  
+     labels = paste0(seq(0, max(avgsales$SalePrice), by = 10000) / 1000, "K"))  
+
+
+text(x = avgsales$SalePrice,  y = bp, labels = format(avgsales$SalePrice, digits = 3),
+     pos = 2, cex = 0.8,  col = "black")  
+
+```
+Q4
+```{R}
+carcount <- table(data[, c("CountryName", "Make")])
+Tcarcount <- t(carcount)
+Make <- rownames(Tcarcount)
+
+
+barplot(Tcarcount, beside = TRUE, cex.names = 0.8, ylab = "Total Count", main = "Cars Sold by Country",col = terrain.colors(length(Make)))
+
+legend(x = 1, y = max(Tcarcount) * 0.9,legend = Make,  fill = terrain.colors(length(Make)),
+       title = "Car Make", cex = 0.8, bty = "n")
+```
+Q5
+```{R}
+totalsales <- aggregate(SalePrice ~ Make, data = data, FUN = sum)
+piepercent <- round(100*totalsales$SalePrice / sum(totalsales$SalePrice), 1)
+
+pie(totalsales$SalePrice, labels = paste(totalsales$Make, piepercent, "%"), 
+    main = "Total Sales by Make", col = terrain.colors(length(totalsales$Make)),
+    border = "black")
+
+legend("bottomright", legend = totalsales$Make, fill = terrain.colors(length(totalsales$Make)), 
+       cex = 0.7, bty = "n")
+```
+Q6
+```{R}
+options(repos = c(CRAN = "https://cloud.r-project.org/"))
+install.packages("plotrix")
+
+library(plotrix)
+par(mar = c(5, 4, 6, 2))
+
+avgsales2 <- aggregate(SalePrice ~ CountryName, data = data, FUN = mean)
+fan.plot(avgsales2$SalePrice, labels = " ", col = terrain.colors(length(avgsales2$CountryName)), 
+         radius = 1, main = "Average Sale Price by Country") 
+legend("bottomright", legend = avgsales2$CountryName, 
+       fill = terrain.colors(length(avgsales2$CountryName)),
+       title = "Countries", cex = 0.8, bty = "n")   
+```
+
+Q7
+```{R}
+hist(data$CostPrice, breaks = 10, col = "skyblue",main = "Histogram of Cost Price",
+     xlab = "Cost Price (in 1000s)", ylab = NULL, border = "black", xaxt = "n")
+
+rug(jitter(data$CostPrice, amount = 0))  
+
+axis(1, at = seq(0, max(data$CostPrice), by = 40000), labels = paste0(seq(0, max(data$CostPrice) / 1000, by = 40), "K"))
+
+par(las = 1)  
+
+box()  
+
+```
+Q8
+```{R}
+data$Profit <- data$SalePrice - data$CostPrice
+
+profit_density <- density(data$Profit)
+
+plot(profit_density, main = "Density of Profit Made from Each Car",
+     xlab = NULL, ylab = NULL,col = "blue",lwd = 2, xaxt = "n")
+
+polygon(profit_density, col = rgb(0, 0, 1, 0.3), border = NA)  
+
+rug(jitter(data$Profit, amount = 0.5), col = "red") 
+
+axis(1, at = seq(0, max(data$Profit), by = 40000), labels = paste0(seq(0, max(data$Profit) / 1000, by = 40), "K"))
+
+par(las = 1)  
+
+box()
+
+```
+Q9
+```{R}
+install.packages("sm")  
+library(sm)
+
+data$Profit <- data$SalePrice - data$CostPrice
+
+sm.density.compare(data$Profit, data$VehicleType,xlab = "Profit", 
+                   main = "Comparison of Profit by Car Type",
+                   col = rainbow(length(unique(data$VehicleType))))
+
+legend("topright", 
+       legend = unique(data$VehicleType), 
+       fill = rainbow(length(unique(data$VehicleType))), 
+       title = "Vehicle Type", cex = 0.8, bty = "n")
+
+axis(1, 
+     at = seq(0, max(data$Profit)), 
+     labels = paste0(seq(0, max(data$Profit) / 1000, by = 40), "K"),
+     las = 1, cex.axis = 0.8) 
+
+```
+Q10
+```{R}
+boxplot(SalePrice ~ VehicleType, data = data, 
+        main = "Sale Price by Car Type", 
+        ylab = "Sale Price (in thousands)", xlab = "", las = 1, col = "lightblue",
+        cex.axis = 0.8, cex.lab = 0.9,xaxt = "n")
+
+axis(2, at = seq(0, max(data$SalePrice), by = 40000), 
+     labels = paste(seq(0, max(data$SalePrice) / 1000, by = 40), "K"), 
+     las = 1, cex.axis = 0.8)  
+
+
+```
+
+
+
+
