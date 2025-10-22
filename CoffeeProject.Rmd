@@ -1,5 +1,5 @@
 ---
-title: "Project3"
+title: "Coffee Project"
 author: "Marc Secasan"
 date: "2024-11-28"
 output: html_document
