@@ -1,0 +1,216 @@
+---
+title: "predoc1"
+author: "Marc Secasan"
+date: "2025-09-30"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyr)
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+```
+
+Define Functions
+```{r}
+NAFunc2 <- function(x) {
+  # Count "" blanks in each column
+  blanks <- sapply(x, function(col) sum(col == "", na.rm = TRUE))
+  blanks_percent <- 100 * blanks / nrow(x)
+
+  # Count NA in each column
+  na_counts <- sapply(x, function(col) sum(is.na(col)))
+  na_percent <- 100 * na_counts / nrow(x)
+
+  cat("Blank string percentages:\n")
+  for (i in names(blanks_percent)) {
+    cat(sprintf("  %-20s : %5.2f%%\n", i, blanks_percent[[i]]))
+  }
+
+  cat("\nNA percentages:\n")
+  for (i in names(na_percent)) {
+    cat(sprintf("  %-20s : %5.2f%%\n", i, na_percent[[i]]))
+  }
+
+  invisible(list(blank_counts = blanks, na_counts = na_counts))
+}
+```
+
+Resource Output
+```{r}
+getwd()
+data1 <- read.csv("/Users/marcsecasan/Desktop/R/predoc1/ercot_resource_output.csv")
+str(data1)
+#1
+length(unique(data1$resource_name))#1121 unique values 
+length(unique(data1$qse))#194 unique values
+
+nrow(unique(data1[c("resource_name","qse")])) #1127 pairs
+unique_pairs <- unique(data1[c("qse","resource_name")])
+
+
+#3a QSE with more than one resource name
+unique_pairs %>%
+  group_by(qse) %>%
+  summarise(num_resc = n_distinct(resource_name)) %>%
+  arrange(desc(num_resc))
+
+#3b resource name with more than one qse
+unique_pairs %>%
+  group_by(resource_name) %>%
+  summarise(num_qse = n_distinct(qse)) %>%
+  arrange(desc(num_qse))
+```
+
+Resource Type
+```{r}
+data2 <- read.csv("~/Desktop/R/predoc1/ercot_resource_types.csv")
+
+NAFunc2(data2)
+nrow(data2)
+NonBlank <- 1121 * (1 - 0.36)
+
+#4a
+length(unique(data2$resource_type))
+
+#4b Finding missing types
+Blanks <- data2 %>%
+  filter(resource_type == "")
+
+#Renaming blank values with approriate entries
+data2[data2$resource_name == "ROSELAND_SOLAR3", "resource_type"] <- "PVGR"
+data2[data2$resource_name == "GALLOWAY_SOLAR1", "resource_type"] <- "PVGR"
+data2[data2$resource_name == "SSPURTWO_WIND_1", "resource_type"] <- "WIND"
+data2[data2$resource_name == "SWEETWN2_WND24", "resource_type"] <- "WIND"
+
+```
+
+5
+```{r}
+#Define vectors for fuel types
+other <- c("DSL","PWRSTR","HYDRO","RENEW")
+natural_gas <- c("SCGT90","CCGT90","SCLE90","GSREH","CCLE90","GSSUP","GSNONR")
+wind <- c("WIND")
+solar <- c("PVGR")
+coal <- c("CLLIG")
+nuclear <- c("NUC")
+
+#Create new column with recoded resource types
+data2 <- data2 %>%
+  mutate(
+    fuel_type = case_when(
+      resource_type %in% other ~ "Other",
+      resource_type %in% natural_gas ~ "Natural Gas",
+      resource_type %in% wind ~ "Wind",
+      resource_type %in% solar ~ "Solar",
+      resource_type %in% coal ~ "Coal",
+      resource_type %in% nuclear ~ "Nuclear"))
+
+
+```
+
+6
+```{r}
+merged_data <- merge(data1, data2, by = "resource_name") #Merge data.frames
+unique(data2$fuel_type)
+str(merged_data)
+
+#Convert chr variable to data
+merged_data$sced_time_stamp <- mdy_hm(merged_data$sced_time_stamp)
+
+#Create columns for individual day, month, DayMonth, hour, and arrange in calendar order
+merged_data <- merged_data %>%
+  mutate(Month = month(sced_time_stamp)) %>%
+  mutate(Day = day(sced_time_stamp)) %>%
+  mutate(Hour = hour(sced_time_stamp)) %>%
+  mutate(DayMonth = format(sced_time_stamp, "%d-%m")) %>% 
+  arrange(sced_time_stamp)
+
+```
+
+Daily Plot
+```{r}
+# Summarise by day
+daily_data <- merged_data %>%
+  mutate(Date = as.Date(sced_time_stamp)) %>%   # extract the date part
+  group_by(Date) %>%
+  summarise(DailyTotal = sum(telemetered_net_output, na.rm = TRUE))
+
+# Plot daily totals
+ggplot(daily_data, aes(x = Date, y = DailyTotal)) +
+  geom_line() +
+  labs(title = "Daily Totals of Telemetered Output",
+       x = "Date",
+       y = "Daily Total") +
+  theme_minimal()
+
+
+```
+
+Hourly
+```{r}
+hourly_data <- merged_data %>%
+  mutate(Hour = hour(sced_time_stamp)) %>%   # extract the hour
+  group_by(Hour) %>%
+  summarise(HourlyTotal = sum(telemetered_net_output, na.rm = TRUE))
+
+# Plot daily totals
+ggplot(hourly_data, aes(x = Hour, y = HourlyTotal)) +
+  geom_line() +
+  labs(title = "Daily Totals of Telemetered Output",
+       x = "Hour",
+       y = "Daily Total") +
+  theme_minimal()
+
+
+```
+
+```{r}
+hourly_data2 <- merged_data %>%
+  mutate(Hour = hour(sced_time_stamp)) %>% # extract the hour
+  group_by(fuel_type, Hour) %>%
+  summarise(HourlyTotal = sum(telemetered_net_output, na.rm = TRUE))
+
+# Plot daily totals
+ggplot(hourly_data2, aes(x = Hour, y = HourlyTotal)) +
+  geom_line(aes(color = fuel_type))
+  labs(title = "Daily Totals of Telemetered Output",
+       x = "Hour",
+       y = "Daily Total") +
+  theme_minimal()
+
+
+```
+
+8
+```{r}
+ARData <- merged_data %>%
+  mutate(DayHour = floor_date(sced_time_stamp, unit = "hour")) %>%
+  group_by(DayHour) %>%
+  summarise(TotalOutput = sum(telemetered_net_output), .groups = "drop")
+
+
+
+ggplot(ARData, aes(x = DayHour, y = TotalOutput)) +
+  geom_line() +
+  theme_classic()
+
+ts_data <- ts(ARData$TotalOutput, frequency = 24)
+
+ARModel <- arima(ts_data, order = c(3, 0, 0))
+summary(ARModel)
+
+
+ts.plot(residuals(ARModel))
+acf(residuals(ARModel))
+pacf(residuals(ARModel))
+
+```
+
+
+
