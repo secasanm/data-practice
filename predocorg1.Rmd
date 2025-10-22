@@ -44,7 +44,7 @@ NAFunc2 <- function(x) {
 Resource Output
 ```{r}
 getwd()
-data1 <- read.csv("/Users/marcsecasan/Desktop/R/predoc1/ercot_resource_output.csv")
+data1 <- read.csv("~/Desktop/R/predoc1/ercot_resource_output.csv")
 str(data1)
 #1
 length(unique(data1$resource_name))#1121 unique values 
