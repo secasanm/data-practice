@@ -1,0 +1,717 @@
+---
+title: "Test"
+author: "Marc Secasan"
+date: "2025-04-08"
+output: html_document
+---
+Load Libraries and initial file setup
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#install.packages("RSQLite")
+#install.packages("Rtsne")
+#install.packages("fmsb")
+#install.packages("psych")
+#install.packages("cvms")
+library(DBI)
+library(RSQLite)
+library(ggplot2)
+library(dplyr)
+library(Rtsne)
+library(fmsb)
+library(psych)
+library(cvms)
+library(caret)
+```
+
+Primary data entry and cleaning
+```{R}
+pokemondata <- read.csv("all_pokemon_data.csv")
+con <- dbConnect(SQLite(), "PokeDB.sqlite")
+dbWriteTable(con, "pokemon", pokemondata, overwrite = TRUE)
+#dbListTables(con)
+#dbReadTable(con, "pokemon")
+
+data <-dbGetQuery(con, "SELECT * FROM pokemon")
+#data
+
+#View data
+#str(data)
+#head(data)
+
+#Finding NA's in columns
+for (i in colnames(data)) {
+    print(paste(i, ":", sum(is.na(data[[i]]))))
+}
+
+#Finding proportion of column that is blank
+obs <- apply(data, 2, function(x) sum(x == ""))
+obs/nrow(data)
+
+#Creating data frame with Secondary.Typing dropped
+data.drop <- data[, -c(4)]
+
+#Creating data frame with all columns, but excluding rows where Secondary.typing is blank
+query <- "
+SELECT * FROM pokemon
+WHERE 
+  \"Secondary.Typing\" != ''
+"
+data.trim <- dbGetQuery(con, query)
+
+#Recode Generation for more intuitive ordering in graphs
+data$Generation <- recode(data$Generation,
+  "generation-i" = "Gen1",
+  "generation-ii" = "Gen2",
+  "generation-iii" = "Gen3",
+  "generation-iv" = "Gen4",
+  "generation-v" = "Gen5",
+  "generation-vi" = "Gen6",
+  "generation-vii" = "Gen7",
+  "generation-viii" = "Gen8",
+  "generation-ix" = "Gen9"
+)
+
+```
+
+Little data manipulation/exploration
+```{R}
+data$Evolution.Stage <- as.factor(data$Evolution.Stage)
+#describe(data)
+```
+
+Chi-squared analysis for multiple variables
+```{R}
+df <- data
+
+# List of variable pairs to test
+variable_pairs <- list(
+  
+  c("Primary.Typing", "Legendary.Status"),
+  c("Secondary.Typing.Flag", "Legendary.Status"),
+  c("Generation", "Legendary.Status"),
+  c("Form", "Legendary.Status"),
+  c("Evolution.Stage", "Legendary.Status")
+)
+
+# Create function to run Chi-squared tests and store results
+run_chi_squared_tests <- function(df, variable_pairs) {
+  results <- matrix(ncol = 3, nrow = length(variable_pairs))
+  colnames(results) <- c("Variable Pair", "Chi-Squared Statistic", "p-value")
+  
+  # Loop through each pair
+  for (i in 1:length(variable_pairs)) {
+    var1 <- variable_pairs[[i]][1]
+    var2 <- variable_pairs[[i]][2]
+    
+    # Create contingency table
+    contingency_table <- table(df[[var1]], df[[var2]])
+    
+    # Perform Chi-squared test
+    chi_test <- chisq.test(contingency_table)
+    
+    # Store the results
+    results[i, 1] <- paste(var1, "vs", var2)
+    results[i, 2] <- chi_test$statistic
+    results[i, 3] <- chi_test$p.value
+  }
+  
+  return(results) #Return results
+}
+
+# Run the Chi-squared tests and store the results
+chi_results <- run_chi_squared_tests(df, variable_pairs)
+
+# Print the results
+print(chi_results)
+
+```
+
+Correlation Matrix of 
+```{R}
+#Extract numeric columns from df
+dfNum <- df[, sapply(df, is.numeric)]
+
+#Create and print correlation matrix
+Corrs <- cor(dfNum)
+Corrs
+```
+
+Compute entropy 
+```{R}
+#Extract column names
+col_name <- colnames(data)
+
+#Create in house entropy function
+entropycalc <- function(x) {
+  freqtable <- table(x)
+  prob <- freqtable/sum(freqtable)
+  entropy <- -sum(prob * log2(prob), na.rm = TRUE)
+  return(entropy)
+}
+# Loop through all columns that are charecters and feed it to entropy function
+for (col_name in colnames(data)) {
+  
+  if (is.character(data[[col_name]])) {
+    entropy_value <- entropycalc(data[[col_name]])  
+    cat("Entropy for", col_name, ":", entropy_value, "\n")
+    
+    cat("--------------------------------------------------------\n")
+  }
+}
+
+```
+
+ANOVA by Legendary status
+```{R}
+#Register dfNum as data frame
+dfNum <- as.data.frame(dfNum)
+
+#Loop through dfNum columns and feed it to anova test and print results 
+results <- lapply(names(dfNum), function(var) {
+  formula <- as.formula(paste(var, "~ Legendary.Status"))
+  model <- aov(formula, data = df)
+  summary(model)
+})
+names(results) <- names(dfNum)
+print(results)
+
+```
+
+Boxplot of baseline stats by evolution stage. Clear differences in distribtuions and means between evolution stages.
+```{R}
+ggplot(data, aes(x = Evolution.Stage, y = Base.Stat.Total, fill = Evolution.Stage)) +
+  geom_boxplot(outlier.shape = NA)+
+  scale_fill_manual(values = c("#72D8FF", "#FFFFBF", "#F76D5E")) +
+    stat_summary(fun = "mean", geom = "point", shape = 19, size = 3, color = "black") +
+    geom_jitter(width = 0.2, size = 0.2) +
+    labs(
+    x = "Evolution Stage",
+    y = "Baseline Stats"
+  ) +
+    ggtitle("Base Stats by Evolution Stage") +
+    theme(plot.title = element_text(hjust = 0.5))
+```
+
+Boxplot of baseline stats by legendary. Significant difference between legendary and non legendary distributions and means.
+```{R}
+# Create the boxplot
+ggplot(data, aes(x = Legendary.Status, y = Base.Stat.Total, fill = Legendary.Status)) +
+  geom_boxplot(alpha = 0.7) +
+  theme_grey() +
+   geom_jitter(width = 0.2, size = 0.2) +
+  scale_fill_manual(values = c("False" = "#72D8FF", "True" = "#F76D5E")) +
+  labs(title = "Base Stat Total by Legendary Status",
+       x = "Legendary Pokémon",
+       y = "Base Stat Total") +
+  theme(legend.position = "right")
+```
+
+Density plot of baseline stats per evolution stage - with means. Distribution of 1st stage evolution heavily skewed right. 2nd stage is closer to a normal distribution but still has an uneven distribution. Stage 3 evolutions are the messiest distribution of the lot but tending to normal. With more observations, the distributions will normalize (natrually).
+```{R}
+cols <- c("#72D8FF", "#FFFFBF", "#F76D5E")
+
+# Calculate mean for each Evolution.Stage
+means <- data %>%
+  group_by(Evolution.Stage) %>%
+  summarise(mean_stat = mean(Base.Stat.Total))
+
+# Now plot
+ggplot(data, aes(x = Base.Stat.Total, fill = Evolution.Stage)) +
+  geom_density(alpha = 0.7) + 
+  scale_fill_manual(values = cols) +
+  labs(
+    subtitle = "Made by Me",
+    x = "Baseline Stats",
+    y = "Density"
+  ) +
+  # Add group-specific mean lines
+  geom_vline(data = means, aes(xintercept = mean_stat, color = Evolution.Stage),
+             linetype = "dashed", size = 1) +
+  ggtitle("Base Stats Density by Evolution Stage") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+```
+Density plots of baseline stats by legendary and non legendary pokemon with means. Legendary pokemon mean exceeds the non legendary mean by 200 points (or 100%). Non-legendary distribtuion almost seems multimodal from visual inspection.
+```{R}
+cols <- c("#72D8FF", "#FFFFBF")
+
+# Calculate mean for each Evolution.Stage
+means <- data %>%
+  group_by(Legendary.Status) %>%
+  summarise(mean_stat = mean(Base.Stat.Total))
+
+# Now plot
+ggplot(data, aes(x = Base.Stat.Total, fill = Legendary.Status)) +
+  geom_density(alpha = 0.7) + 
+  scale_fill_manual(values = cols) +
+  labs(
+    subtitle = "Made by Me",
+    x = "Baseline Stats",
+    y = "Density"
+  ) +
+  # Add group-specific mean lines
+  geom_vline(data = means, aes(xintercept = mean_stat, color = Legendary.Status),
+             linetype = "dashed", size = 1) +
+  ggtitle("Base Stats Density by Legendary Status") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+PCA Plot
+Pokémon at the top of the graph are likely slow, tanky defenders.
+Pokémon at the bottom are likely fragile but fast and offensive.
+```{R}
+
+# Select base stat columns
+stats <- data.drop %>%
+  select(Health, Attack, Defense, Special.Attack, Special.Defense, Speed)
+
+# Scale the data for PCA/t-SNE
+stats_scaled <- scale(stats)
+
+
+# Perform PCA
+pca_result <- prcomp(stats_scaled)
+
+# Add PCA components to dataframe
+pokemon_pca <- data.drop %>%
+  mutate(PC1 = pca_result$x[,1],
+         PC2 = pca_result$x[,2])
+
+#Plot PCA by legendary and non legendary status
+ggplot(pokemon_pca, aes(x = PC1, y = PC2, color = Legendary.Status)) +
+  geom_point(alpha = 0.8, size = 2) +
+  theme_minimal() +
+  labs(title = "PCA of Pokémon Base Stats (Legendary vs Non-Legendary)",
+       x = "Offensive Abilities",
+       y = "Slow Defense vs Quick Offense")
+
+#Plot PCA by primary type
+ggplot(pokemon_pca, aes(x = PC1, y = PC2, color = Primary.Typing)) +
+  geom_point(alpha = 0.8, size = 2) +
+  theme_minimal() +
+  labs(title = "PCA of Pokémon Base Stats by Primary Typing",
+       x = "Offensive Abilities",
+       y = "Slow Defense vs Quick Offense")
+
+```
+
+Prep data for radar chart
+```{R}
+#Pull non-legendary pokemon from pokemon db
+dataNotLegendary <- dbGetQuery(con, "SELECT * FROM pokemon WHERE `Legendary.Status` = 'False'")
+#dataNotLegendary
+
+#Pull legendary pokemon from db
+dataLegendary <- dbGetQuery(con, "SELECT * FROM pokemon WHERE `Legendary.Status` = 'True'")
+#dataLegendary
+
+#Read column names and extract only necessary columns (base line stats) for legendary and non legendary pokemon into vector
+#colnames(dataNotLegendary)
+dataNotLegendaryStats <- dataNotLegendary[, c(19:24)]
+
+#colnames(dataLegendary)
+dataLegendaryStats <- dataLegendary[, c(19:24)]
+
+#Compute means for each column in legendary and not legendary stats
+NonLegendStats <- apply(dataNotLegendaryStats,2, mean)
+LegendStats <- apply(dataLegendaryStats,2, mean)
+
+#Set limits for radar plot
+minVal <- c(50,50,50,50,50,50)
+maxVal <- c(110,110,110,110,110,110)
+RadarColNames <- c("Health", "Attack", "Defense", "SpclAttack", "SpclDefense", "Speed")
+
+#Insert limits and means of pokemon by factor into object for radar plot
+RadarStats <- rbind(maxVal, minVal, NonLegendStats, LegendStats)
+RadarStats <- as.data.frame(RadarStats)
+colnames(RadarStats) <- c("Health", "Attack", "Defense", "SpclAttack", "SpclDefense", "Speed")
+rownames(RadarStats) <- c("Max", "Min", "Non-Legendary", "Legendary")
+
+```
+
+Radar plot legendary vs non legendary. Legendary pokemon outperform non legendary pokemon, exceedingly so in every category. 
+```{R}
+library(fmsb)
+
+#Create radar plot by legendary status for various mean statistics
+par(bg = "#f5f5f5", mar = c(1, 1, 3, 1))
+
+radarchart(RadarStats,
+           axistype = 2 ,                          # full axis with labels
+           pcol = c("#00c8ff", "#ff5e57"),        # brighter line colors
+           pfcol = c(rgb(0, 0.9, 0.9, 0.4), rgb(0.9, 0.9, 0.9, 0.4)),
+           plwd = 3,
+           plty = c(1, 2),
+           cglcol = "gray", cglty = 2, cglwd = 0.8, # gridlines
+           axislabcol = "black",
+           vlcex = 0.9,                           # label size
+           title = "Average Base Stats: Legendary vs Non-Legendary")
+
+legend("topright",
+       legend = c("Non-Legendary", "Legendary"),
+       col = c("#00c8ff", "#ff5e57"),
+       lty = c(1, 2), lwd = 3,
+       bty = "n", cex = 0.9)
+
+```
+
+Variance Radar graph legendary vs non legendary. Variances seem fairly consistent for each category and by each factor, with non-legendary pokemon seeing a slight amount more variance per category than legendary.
+```{R}
+#Compute the variance of each column by factor
+NonLegendVar <- apply(dataNotLegendaryStats,2, var)
+LegendVar <- apply(dataLegendaryStats,2, var)
+
+#Create parameters for legendary and non legendary pokemon with parameters
+minVar <- c(600,600,600,600,600,600)
+maxVar <- c(1300,1300,1300,1300,1300,1300)
+RadarColNamesVar <- c("Health", "Attack", "Defense", "SpclAttack", "SpclDefense", "Speed")
+
+#Feed parameters to radar variance object
+RadarVar <- rbind(maxVar, minVar, NonLegendStats, LegendStats)
+RadarVar <- as.data.frame(RadarVar)
+colnames(RadarVar) <- c("Health", "Attack", "Defense", "SpclAttack", "SpclDefense", "Speed")
+rownames(RadarVar) <- c("Max", "Min", "Non-Legendary", "Legendary")
+
+#Create radar plot for variance by legendary status
+par(bg = "#f5f5f5", mar = c(1, 1, 3, 1))
+
+radarchart(RadarVar,
+           axistype = 6,                          # full axis with labels
+           pcol = c("#00c8ff", "#ff5e57"),        # brighter line colors
+           pfcol = c(rgb(0, 0.9, 0.9, 0.4), rgb(0.9, 0.9, 0.9, 0.4)),
+           plwd = 3,
+           plty = c(1, 2),
+           cglcol = "gray", cglty = 1, cglwd = 0.8, # gridlines
+           axislabcol = "black",
+           vlcex = 0.9,                           # label size
+           title = "Variance of Base Stats: Legendary vs Non-Legendary")
+
+legend("topright",
+       legend = c("Non-Legendary", "Legendary"),
+       col = c("#00c8ff", "#ff5e57"),
+       lty = c(1, 2), lwd = 3,
+       bty = "n", cex = 0.9)
+```
+
+Catch Rate vs Strength scatter plot with Legendary as factor. As base line stats increase, catch rate decreases, and we see a weak cluster of legendary Pokemon in this extreme category of high baseline and low catch rate.
+```{R}
+ggplot(data, aes(x = Base.Stat.Total, y = Catch.Rate, color = as.factor(Legendary.Status))) +
+  geom_point(alpha = 0.6) +
+  labs(x = "Total Base Stats", y = "Catch Rate", title = "Catch Rate vs. Strength") +
+  scale_color_manual(values = c("gray", "red"), labels = c("Non-Legendary", "Legendary")) +
+  theme_minimal()
+```
+
+BoxPlot of Baseline stats by Generation and ANOVA. A boxplot analysis shows that baseline stats do vary by generation, with gens 4,7 and 9 having the three highest averages and gen 5 having the smallest range. An anova test backs this up with most numeric variables varying significantly between generations.
+```{R}
+# Now plot boxplots of baseline stats by generation 
+ggplot(data, aes(y = Base.Stat.Total, as.factor(Generation))) +
+  geom_boxplot()
+  labs(
+    subtitle = "Made by Me",
+    x = "Baseline Stats",
+    y = "Density"
+  ) +
+  theme(plot.title = element_text(hjust = 0.5))
+  
+  
+#colnames(data)  
+
+dfNum <- as.data.frame(dfNum)
+
+#Run anova table of numeric variables by generation
+results <- lapply(names(dfNum), function(var) {
+  formula <- as.formula(paste(var, "~ Generation"))
+  model <- aov(formula, data = df)
+  summary(model)
+})
+names(results) <- names(dfNum)
+print(results)
+```
+Reloading pROC as to not have issues with radar plot functions.
+```{R}
+library(pROC)
+```
+
+Prep data for logistic model and xgBoost
+```{R}
+# Convert target to factor
+data$Legendary.Status <- as.factor(data$Legendary.Status)
+
+# Define predictor variables
+predictors <- c("Health", "Attack", "Defense", "Special.Attack", "Special.Defense", "Speed",
+                "Generation", "Primary.Typing", "Secondary.Typing.Flag", "Evolution.Stage", "Number.of.Evolution","Weight..lbs.","Height..in.",
+                "Catch.Rate")
+
+
+
+# Create model data frame
+model_data <- data[, c(predictors, "Legendary.Status")]
+
+# Convert categorical variables to factors
+model_data$Generation <- as.factor(model_data$Generation)
+model_data$Primary.Typing <- as.factor(model_data$Primary.Typing)
+model_data$Secondary.Typing.Flag <- as.factor(model_data$Secondary.Typing.Flag)
+model_data$Evolution.Stage <- as.integer(model_data$Evolution.Stage)
+model_data$Legendary.Status <- as.factor(model_data$Legendary.Status)
+
+set.seed(678)
+
+#Partitioning data into training and testing
+train_index <- createDataPartition(model_data$Legendary.Status, p = 0.8, list = FALSE)
+train_data <- model_data[train_index, ]
+test_data <- model_data[-train_index, ]
+
+
+pokemon_name <- data$Name        # store names before subsetting
+pokemon_name_test <- pokemon_name[-train_index]  # get test names only
+
+
+```
+
+Logistic model and ROC curve. Model accuracy is 92.8%
+```{R}
+library(caret)
+log_model <- glm(Legendary.Status ~ ., data = train_data, family = "binomial")
+summary(log_model)
+
+# Predict on test
+log_pred <- predict(log_model, test_data, type = "response")
+log_pred_class <- ifelse(log_pred > 0.5, "True", "False") %>% as.factor()
+
+# Create confusion matrix
+confusionMatrix(log_pred_class, test_data$Legendary.Status)
+
+
+# Get predicted probabilities from logistic model
+log_pred_prob <- predict(log_model, test_data, type = "response")
+
+# Create ROC object
+log_roc <- roc(test_data$Legendary.Status, log_pred_prob)
+
+# Plot roc curve
+plot.roc(log_roc, col = "blue", lwd = 2, main = "Logistic Regression ROC Curve")
+abline(a = 0, b = 1, lty = 2, col = "gray")
+
+# compute AUC
+auc_value <- auc(log_roc)
+cat("AUC:", auc_value, "\n")
+
+```
+
+Reduce logistic model using stepwise reduction in both directions. We end up eliminating all factor variables and only keep numeric. Our accuracy does not change while the AIC falls to 221.55, using only numeric variables. All of which are statistically significant. 
+```{R}
+# Stepwise AIC reduction
+log_model_reduced <- step(log_model, direction = "both")
+
+# Summary of reduced model
+summary(log_model_reduced)
+
+# Predict on test
+log_pred2 <- predict(log_model_reduced, test_data, type = "response")
+log_pred_class2 <- ifelse(log_pred2 > 0.5, "True", "False") %>% as.factor()
+
+# Create confusion matrix
+confusionMatrix(log_pred_class2, test_data$Legendary.Status)
+
+#Run predictions on model
+log_pred_prob2 <- predict(log_model_reduced, test_data, type = "response")
+
+
+#Create ROC object
+log_roc2 <- roc(test_data$Legendary.Status, log_pred_prob2)
+
+#Plot ROC
+plot.roc(log_roc2, col = "blue", lwd = 2, main = "Logistic Regression ROC Curve")
+abline(a = 0, b = 1, lty = 2, col = "gray")
+
+#Calculate AUC
+auc_value2 <- auc(log_roc2)
+cat("AUC:", auc_value2, "\n")
+```
+
+First xgBoost model. We find that our top variables of importance are catch rate, attack, special attack and health. These are the only variables that we will run in our reduced model. Model accuracy is 93.22% with 95% conf. interval (0.8922, 0.9608)%
+```{R}
+library(xgboost)
+#install.packages("caTools")  
+library(caTools)
+
+#Split data into x and y testing and training data 
+y_train <- as.integer(train_data$Legendary.Status) - 1
+y_test <- as.integer(test_data$Legendary.Status) - 1
+X_train <- train_data %>% select(-c(Legendary.Status, Generation, Primary.Typing, Secondary.Typing.Flag))
+X_test <- test_data %>% select(-c(Legendary.Status, Generation, Primary.Typing, Secondary.Typing.Flag))
+
+#Verify the structure of the data
+str(X_train)
+
+#Set xgBoost parameters
+xgb_params <- list(
+  booster = "gbtree",
+  eta = 0.01,
+  max_depth = 8,
+  gamma = 4,
+  subsample = 0.75,
+  colsample_bytree = 1,
+  objective = "multi:softprob",
+  eval_metric = "mlogloss",
+  num_class = 2
+)
+
+#Creating training and testing matrices
+xgb_train <- xgb.DMatrix(data = as.matrix(X_train), label = y_train)
+xgb_test <- xgb.DMatrix(data = as.matrix(X_test), label = y_test)
+
+#Running model with previously defined parameters
+xgb_model <- xgb.train(
+  params = xgb_params,
+  data = xgb_train,
+  nrounds = 50,
+  verbose = 1
+)
+xgb_model
+
+#Create importnace matrix and plot variables of importance. 
+importance_matrix <- xgb.importance(
+  feature_names = colnames(xgb_train), 
+  model = xgb_model
+)
+importance_matrix
+
+xgb.plot.importance(importance_matrix)
+
+#Create predictions
+xgb_preds <- predict(xgb_model, as.matrix(X_test), reshape = TRUE)
+xgb_preds <- as.data.frame(xgb_preds)
+colnames(xgb_preds) <- levels(model_data$Legendary.Status)
+xgb_preds
+
+xgb_preds$PredictedClass <- apply(xgb_preds, 1, function(y) colnames(xgb_preds)[which.max(y)])
+xgb_preds$ActualClass <- levels(model_data$Legendary.Status)[y_test + 1]
+xgb_preds
+
+# then after predictions:
+xgb_preds$Pokemon <- pokemon_name_test
+
+#View predictions
+head(xgb_preds, 10)
+
+#Check accuracy
+accuracy <- sum(xgb_preds$PredictedClass == xgb_preds$ActualClass) / nrow(xgb_preds)
+accuracy
+
+#Create confusion matrix
+confusionMatrix(factor(xgb_preds$ActualClass), factor(xgb_preds$PredictedClass))
+
+#Plot confusion matrix
+cm <- confusionMatrix(factor(xgb_preds$ActualClass), factor(xgb_preds$PredictedClass))
+cfm <- as_tibble(cm$table)
+plot_confusion_matrix(cfm, target_col = "Reference", prediction_col = "Prediction", counts_col = "n")
+```
+
+xgBoost ROC curve. AUC = 0.968
+```{R}
+xgb_pred_prob <- xgb_preds$True
+
+# Create ROC curve object
+xgb_roc <- roc(response = xgb_preds$ActualClass, predictor = xgb_pred_prob, levels = c("False", "True"))
+
+# Plot
+plot.roc(xgb_roc, col = "darkorange", lwd = 2, main = "XGBoost ROC Curve")
+abline(a = 0, b = 1, lty = 2, col = "gray")
+
+# Add AUC
+auc_val <- auc(xgb_roc)
+legend("bottomright", legend = paste("AUC =", round(auc_val, 3)), col = "darkorange", lwd = 2)
+
+```
+
+Reduce xgBoost and ROC curve. Having only used the top four variables of importance and increase nrounds to 500 from 50, accuracy decrease to 92.37% with 95% conf. interval (0.8821, 0.9542)%. AUC also decreased to 0.964. For a large reduction in variables, this is a minor reduction in predicting power.
+```{R}
+library(caret)
+library(xgboost)
+library(caTools)
+
+#Create testing and training data
+y_train2 <- as.integer(train_data$Legendary.Status) - 1
+y_test2 <- as.integer(test_data$Legendary.Status) - 1
+X_train2 <- train_data %>% select(c(Catch.Rate,Attack,Special.Attack))
+X_test2 <- test_data %>% select(c(Catch.Rate,Attack,Special.Attack))
+
+
+#Create testing and training matrices
+xgb_train2 <- xgb.DMatrix(data = as.matrix(X_train2), label = y_train2)
+xgb_test2 <- xgb.DMatrix(data = as.matrix(X_test2), label = y_test2)
+
+#Set parameters
+xgb_params2 <- list(
+  booster = "gbtree",
+  eta = 0.01,
+  max_depth = 8,
+  gamma = 4,
+  subsample = 0.75,
+  colsample_bytree = 1,
+  objective = "multi:softprob",
+  eval_metric = "mlogloss",
+  num_class = 2
+)
+
+#Run model 2, this time with 500 rounds
+xgb_model2 <- xgb.train(
+  params = xgb_params2,
+  data = xgb_train2,
+  nrounds = 500,
+  verbose = 1
+)
+xgb_model2
+
+#Create importance matrix
+importance_matrix2 <- xgb.importance(
+  feature_names = colnames(xgb_train2), 
+  model = xgb_model2
+)
+importance_matrix2
+
+#Plot variables of importance (we only used 4 variables so they are all plotted)
+xgb.plot.importance(importance_matrix2)
+
+#Run predictions 
+xgb_preds2 <- predict(xgb_model2, as.matrix(X_test2), reshape = TRUE)
+xgb_preds2 <- as.data.frame(xgb_preds2) #Set predictions as data frame
+colnames(xgb_preds2) <- levels(model_data$Legendary.Status)
+xgb_preds2
+
+xgb_preds2$PredictedClass <- apply(xgb_preds2, 1, function(y) colnames(xgb_preds2)[which.max(y)])
+xgb_preds2$ActualClass <- levels(model_data$Legendary.Status)[y_test2 + 1]
+xgb_preds2
+
+# then after predictions:
+xgb_preds2$Pokemon <- pokemon_name_test
+head(xgb_preds2, 10)
+
+#Check accuracy
+accuracy2 <- sum(xgb_preds2$PredictedClass == xgb_preds2$ActualClass) / nrow(xgb_preds2)
+accuracy2
+
+#Create CM
+confusionMatrix(factor(xgb_preds2$ActualClass), factor(xgb_preds2$PredictedClass))
+
+
+xgb_pred_prob2 <- xgb_preds2$True
+
+#Create ROC curve object
+xgb_roc2 <- roc(response = xgb_preds2$ActualClass, predictor = xgb_pred_prob2, levels = c("False", "True"))
+
+#Plot ROC curve
+plot.roc(xgb_roc2, col = "darkorange", lwd = 2, main = "XGBoost ROC Curve")
+abline(a = 0, b = 1, lty = 2, col = "gray")
+
+#Compute AUC
+auc_val2 <- auc(xgb_roc2)
+legend("bottomright", legend = paste("AUC =", round(auc_val2, 3)), col = "darkorange", lwd = 2)
+
+```
+
+
+

@@ -1,0 +1,670 @@
+---
+title: "Project3"
+author: "Marc Secasan"
+date: "2024-11-28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+```
+
+coffeeclean.csv is partially cleaned data. Further steps to clean were taken below.
+```{R}
+#Read data and omit variables
+data <- read.csv("coffeeclean.csv")
+dataclean <-na.omit(data)
+
+dfTemp <- dataclean #Create data frame
+#colnames(df)
+
+
+#Renaming
+colnames(dfTemp) <- c("Age", "CupsPerDay", "WhereDrink", "BrewStyleHome",
+                  "WherePurchase", "FavoriteDrink", "Additives", "Strength",
+                  "Roast", "CaffineLevel", "Expertise", "WorkLocation", 
+                  "MonthlyExp", "Why", "EnjoyTaste", "Origin", "MaxSpentPerCup",
+                  "MaxWilling", "CafeValueSatisfaction", "EquiptValue", "EquiptValueSatisfaction",
+                  "Gender","Education", "Ethnicity", "Employment", "NumberOfChildren",
+                  "PoliticalAff")
+
+#Removing variables that will not be used for analysis
+df <-dfTemp[, c(-3,-4,-5, -7, -12, -14)]
+#head(df)
+
+attach(df)
+
+#Add temporary colum
+df$NAge <- substr(df$Age, 1, 2)
+#df$NAge
+
+#Move new coloum to front of Df
+df <- df %>%
+  select(NAge, everything())
+
+#Change category ">65 to 65
+df$NAge <- ifelse(df$NAge == ">6", 65, df$NAge)
+
+#Remove colums that are <18
+df <- df %>%
+  filter(NAge != "<1")
+
+#Print counts of new colum for verification
+NAgeC <- df %>% 
+  count(NAge)
+#print(NAgeC)
+
+#Add new values to the age column for easier use
+df$Age <- df$NAge
+
+
+#Change more than 4 cups a day to at least 5
+df$CupsPerDay <- ifelse(df$CupsPerDay == "More than 4", 5, df$CupsPerDay)
+
+#Change less than one cup per day to half a cup
+df$CupsPerDay <- ifelse(df$CupsPerDay == "Less than 1", 0.5, df$CupsPerDay)
+
+#View count of cups
+CountCups <- df %>% 
+  count(CupsPerDay)
+#print(CountCups)
+
+#Change number of children: None to zero
+df$NumberOfChildren <- ifelse(df$NumberOfChildren == "None", 0, df$NumberOfChildren)
+
+#Change number of children: More than 3 to 4
+df$NumberOfChildren <- ifelse(df$NumberOfChildren == "More than 3", 4, df$NumberOfChildren)
+
+#View count of kids
+CountKids <- df %>%
+  count(NumberOfChildren)
+#print(CountKids)
+
+
+#Changing Monthly Exp from a range to the minimum value in that range
+MinMonthExp <- ifelse(df$MonthlyExp == "<$20", 1,
+                      ifelse(df$MonthlyExp == "$20-$40", 20, 
+                      ifelse(df$MonthlyExp == "$40-$60", 40,
+                      ifelse(df$MonthlyExp == "$60-$80", 60,
+                      ifelse(df$MonthlyExp == "$80-$100", 80, 
+                      ifelse(df$MonthlyExp == ">$100", 100, NA))))))
+
+
+#table(MinMonthExp)
+#table(MonthlyExp)
+df$MinMonthExp <- MinMonthExp
+
+
+
+#Changing max willing to spend per cup from a range to the minimum value in that range
+MaxWillingPer <- ifelse(df$MaxWilling == "Less than $2", 1,
+                         ifelse(df$MaxWilling == "$2-$4", 2,
+                         ifelse(df$MaxWilling == "$4-$6", 4,
+                         ifelse(df$MaxWilling == "$6-$8", 6,
+                         ifelse(df$MaxWilling == "$8-$10", 8,
+                         ifelse(df$MaxWilling == "$10-$15", 10,
+                         ifelse(df$MaxWilling == "$15-$20", 15,
+                         ifelse(df$MaxWilling == "More than $20", 20, NA))))))))
+
+
+
+
+#table(MaxWilling)
+#table(MaxWillingPer)
+df$MaxWillingPer <- MaxWillingPer
+
+
+
+#Changing max spent per cup from a range to the minimum value in that range
+MaxSpentPer <- ifelse(df$MaxSpentPerCup == "Less than $2", 1,
+                      ifelse(df$MaxSpentPerCup == "$2-$4", 2,
+                      ifelse(df$MaxSpentPerCup == "$4-$6", 4,
+                      ifelse(df$MaxSpentPerCup == "$6-$8", 6,
+                      ifelse(df$MaxSpentPerCup == "$8-$10", 8,
+                      ifelse(df$MaxSpentPerCup == "$10-$15", 10,
+                      ifelse(df$MaxSpentPerCup == "$15-$20", 15, 
+                      ifelse(df$MaxSpentPerCup == "More than $20", 20, NA))))))))
+
+
+#table(MaxSpentPerCup)
+#table(MaxSpentPer)
+df$MaxSpentPer <- MaxSpentPer
+
+
+
+
+
+df$NAge <- as.numeric(df$NAge)
+df$Expertise <- as.numeric(df$Expertise)
+df$MinMonthExp <- as.numeric(df$MinMonthExp)
+df$MaxWillingPer <- as.numeric(df$MaxWillingPer)
+df$MaxSpentPer <- as.numeric(df$MaxSpentPer)
+df$CupsPerDay <- as.numeric(df$CupsPerDay)
+
+df$Age <- factor(df$Age)
+df$FavoriteDrink <- factor(df$FavoriteDrink)
+df$Strength <- factor(df$Strength)
+df$Roast <- factor(df$Roast)
+df$CaffineLevel <- factor(df$CaffineLevel)
+df$EnjoyTaste <- factor(df$EnjoyTaste)
+df$Origin <- factor(df$Origin)
+df$CafeValueSatisfaction <- factor(df$CafeValueSatisfaction)
+df$Gender <- factor(df$Gender)
+df$Education <- factor(df$Education)
+df$Ethnicity <- factor(df$Ethnicity)
+df$Employment <- factor(df$Employment)
+df$NumberOfChildren <- factor(df$NumberOfChildren)
+df$PoliticalAff <- factor(df$PoliticalAff)
+df$CupsFactor <- factor(df$CupsPerDay)
+df$MaxWillingFactor <- factor(df$MaxWillingPer)
+df$MaxSpentFactor <- factor(df$MaxSpentPer)
+
+#str(df)
+#summary(df)
+
+colnames(df)
+```
+
+Entropy calculation 
+```{R}
+#Compute entropy for each cat. variable
+
+entropycalc <- function(x) {
+  freqtable <- table(x)
+  prob <- freqtable/sum(freqtable)
+  entropy <- -sum(prob * log2(prob), na.rm = TRUE)
+  return(entropy)
+}
+
+# Calculate entropy for the 'Roast' column manually
+
+# Calculate the frequency of each unique category
+freq_table <- table(df$Roast)
+
+# Calculate the probabilities
+probabilities <- freq_table / sum(freq_table)
+
+# Calculate the entropy
+entropy_manual <- -sum(probabilities * log2(probabilities), na.rm = TRUE)
+
+# Print the manually calculated entropy
+cat("Manually calculated entropy for Roast:", entropy_manual, "\n")
+
+```
+
+Taking each column and checking for nulls, invalid outcomes, and basic statistics for numeric variables as well as reporting entropy
+```{R}
+
+# Loop through each column in the dataframe df
+for (col_name in colnames(df)) {
+  cat("\nChecking column:", col_name, "\n")
+  
+  # Check for NA values
+  na_count <- sum(is.na(df[[col_name]]))
+  cat("Number of NAs:", na_count, "\n")
+  
+  # If it's a numeric column, check summary statistics
+  if (is.numeric(df[[col_name]])) {
+    cat("Summary statistics for numeric column:", col_name, "\n")
+    print(summary(df[[col_name]]))  # Prints summary of the numeric column
+    
+    # Check for non-finite values (e.g., NA, Inf, -Inf)
+    non_finite_count <- sum(!is.finite(df[[col_name]]))
+    cat("Non-finite values (NA, Inf, -Inf):", non_finite_count, "\n")
+    
+    # Check for outliers by seeing if min and max values are within reasonable ranges
+    min_val <- min(df[[col_name]], na.rm = TRUE)
+    max_val <- max(df[[col_name]], na.rm = TRUE)
+    cat("Min and Max values:", min_val, max_val, "\n")
+  }
+  
+  # If it's a factor column, check levels and missing levels
+  if (is.factor(df[[col_name]])) {
+    cat("Levels in factor column:", col_name, "\n")
+    print(levels(df[[col_name]]))  # Prints levels of the factor variable
+    
+    # Check if there are any levels with zero occurrences
+    level_counts <- table(df[[col_name]])
+    cat("Levels with zero occurrences:", names(level_counts[level_counts == 0]), "\n")
+    cat("Frequency table for", col_name, ":\n") #Print Frequency table    
+    print(table(df[[col_name]]))
+    entropy_value <- entropycalc(df[[col_name]]) #Print entropy
+    cat("Entropy for", col_name, ":", entropy_value, "\n")
+
+  }
+  
+  # If it's a character column, check for any unexpected entries
+  if (is.character(df[[col_name]])) {
+    cat("Unique values in character column:", col_name, "\n")
+    print(unique(df[[col_name]]))  # Prints unique values in the character column
+    cat("Frequency table for", col_name, ":\n") #Print Frequency table
+    print(table(df[[col_name]]))
+    entropy_value <- entropycalc(df[[col_name]]) #Print entropy
+    cat("Entropy for", col_name, ":", entropy_value, "\n")
+  }
+  
+  cat("--------------------------------------------------------\n")
+}
+
+
+```
+
+General Data Exploration through visuals
+```{R}
+#Frequency plot for Age (Factor)
+ggplot(df, aes(x = Age)) +
+  geom_bar(fill = "lightblue", color = "darkblue") +
+  labs(title = "Frequency of Age", x = "Age", y = "Frequency") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+#Frequency plot for MinMonthExp (Numeric) with adjusted binwidth
+ggplot(df, aes(x = MinMonthExp)) +
+  geom_histogram(bins = 45, fill = "lightblue", color = "darkblue", alpha = 0.7) +
+  labs(title = "Frequency of Minimum Monthly Expenditure", x = "MinMonthlyExp", y = "Frequency") +
+  theme_minimal()
+
+#Frequency plot for MaxWillingPer (Numeric) with adjusted binwidth
+ggplot(df, aes(x = MaxWillingPer)) +
+  geom_histogram(bins = 30, fill = "lightgreen", color = "darkgreen", alpha = 0.7) +
+  labs(title = "Frequency of Maximum Willingness to Spend per Cup", x = "MaxWillingPer", y = "Frequency") +
+  theme_minimal()
+
+#Frequency plot for MaxSpentPer (Numeric) with adjusted binwidth
+ggplot(df, aes(x = MaxSpentPer)) +
+  geom_histogram(bins = 30, fill = "lightcoral", color = "darkred", alpha = 0.7) +
+  labs(title = "Frequency of Maximum Amount Spent per Month", x = "MaxSpentPer", y = "Frequency") +
+  theme_minimal()
+
+#Frequency plot for CupsPerDay (Numeric) with fixed binwidth
+ggplot(df, aes(x = CupsPerDay)) +
+  geom_histogram(bins = 10, fill = "lightyellow", color = "darkorange", alpha = 0.7) +
+  labs(title = "Frequency of Cups per Day", x = "CupsPerDay", y = "Frequency") +
+  theme_minimal()
+
+
+# Frequency plot for FavoriteDrink (Factor)
+ggplot(df, aes(x = FavoriteDrink)) +
+  geom_bar(fill = "lightpink", color = "darkred") +
+  labs(title = "Frequency of Favorite Drink", x = "Favorite Drink", y = "Frequency") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(df, aes(x = Strength)) +
+  geom_bar(fill = "lightseagreen", color = "darkgreen") +
+  labs(title = "Frequency of Strength Preference", x = "Strength", y = "Frequency") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(df, aes(x = Origin)) +
+  geom_bar(fill = "skyblue", color = "blue") +
+  labs(title = "Frequency of Knowledge of Coffee Origin", x = "Origin", y = "Frequency") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+Visualization 1: Roast vs MaxWillingPer
+```{R}
+ggplot(df, aes(x = Roast, y = MaxWillingPer)) +
+  geom_boxplot(
+    fill = "skyblue", 
+    outlier.shape = 1,  
+    outlier.fill = "black", 
+    outlier.size = 2,  
+    width = 0.6  
+  ) +
+  stat_boxplot(geom = "errorbar", width = 0.3) +  
+  scale_y_continuous(
+    labels = scales::label_dollar(),  
+    breaks = seq(0, max(df$MaxWillingPer, na.rm = TRUE), by = 1) 
+  ) + 
+  labs(
+    title = "Max Willing to Spend per Cup by Roast",  
+    y = "Willing to Spend",  
+    x = NULL  
+  ) +
+  theme_minimal() + 
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5, size = 14),  
+    axis.title.x = element_blank(),  
+    axis.title.y = element_text(size = 10, face = "italic"),  
+    panel.grid = element_blank(), 
+    axis.ticks = element_line(color = "black"),  
+    axis.line = element_line(color = "black", size = 1),  
+    plot.background = element_rect(fill = "white", color = "black"),
+    panel.background = element_rect(fill = "white", color = "black", size = 1),  
+    plot.margin = margin(10, 10, 10, 10),
+    axis.text = element_text(size = 10)  
+  )
+```
+
+Visualization 2: Roast Frequency
+```{R}
+# Create a data frame with roast preferences and proportions
+roast_count <- df %>%
+  group_by(Roast) %>%
+  summarise(Count = n()) %>%
+  mutate(Proportion = Count / sum(Count))
+
+# Create bar plot with labels
+ggplot(roast_count, aes(x = Roast, y = Count, fill = Roast)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = paste(Count, "(", round(Proportion * 100, 1), "%)", sep = "")),
+            vjust = -0.5, size = 3) +
+  labs(
+    title = "Frequency of Roast Preference",
+    x = "Roast Type",
+    y = "Count"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(size = 12),
+    axis.title.y = element_text(size = 12),
+    axis.text = element_text(size = 10)
+  )
+
+
+```
+
+Visualization 3: Minimum Monthly Expenditure
+```{R}
+ggplot(df, aes(x = MinMonthExp, fill = CafeValueSatisfaction)) + 
+  geom_density(alpha = 0.5, color = "darkblue") +  
+  labs(
+    title = "Density Plot of Minimum Monthly Expenditure by Cafe Value Satisfaction",
+    x = "Minimum Monthly Expenditure (MinMonthExp)",
+    y = "Density"
+  ) + 
+  theme_minimal() + 
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(size = 12),
+    axis.title.y = element_text(size = 12),
+    axis.text = element_text(size = 10)
+  ) + 
+  scale_fill_brewer(palette = "Set1")  
+
+```
+
+Visualization 4: Maximum Willing to Spend per Cup
+```{R}
+ggplot(df, aes(x = MaxWillingPer, fill = CafeValueSatisfaction)) + 
+  geom_density(alpha = 0.5, color = "darkblue") + 
+  labs(
+    title = "Density Plot of Max Willingness to Spend by Cafe Value Satisfaction",
+    x = "Max Willingness to Spend per Cup",
+    y = "Density"
+  ) + 
+  theme_minimal() + 
+  theme(
+    plot.title = element_text(face = "bold", size = 14),
+    axis.title.x = element_text(size = 12),
+    axis.title.y = element_text(size = 12),
+    axis.text = element_text(size = 10)
+  )
+
+```
+
+Chi-squared analysis Cups per day vs Roast
+```{R}
+chi1 <- chisq.test(df$Roast, df$CupsPerDay)
+print(chi1)
+
+table(df$Roast, df$CupsPerDay)
+
+library(ggplot2)
+
+# Create the contingency table
+roast_cups_table <- table(df$Roast, df$CupsPerDay)
+
+# Convert the table to a data frame for ggplot
+roast_cups_df <- as.data.frame(as.table(roast_cups_table))
+colnames(roast_cups_df) <- c("Roast", "CupsPerDay", "Count")
+
+# Plot the heatmap
+ggplot(roast_cups_df, aes(x = Roast, y = CupsPerDay, fill = Count)) +
+  geom_tile() +
+  scale_fill_gradient(low = "White", high = "blue") +
+  theme_minimal() +
+  labs(title = "Heatmap of Coffee Roast vs Cups Per Day",
+       x = "Roast", y = "Cups per Day", fill = "Count")
+
+```
+
+Chi-squared analysis for Age vs Favorite Coffee Style
+```{R}
+chi2 <- chisq.test(df$Age, df$FavoriteDrink)
+print(chi2)
+
+table(df$Age, df$FavoriteDrink)
+
+# Create a contingency table for Age and FavoriteDrink
+AgeFavdf <- df %>%
+  group_by(Age, FavoriteDrink) %>%
+  summarise(Count = n()) %>%
+  ungroup()
+
+
+# Plot the heatmap
+ggplot(AgeFavdf, aes(x = Age, y = FavoriteDrink, fill = Count)) +
+  geom_tile() +
+  scale_fill_gradient(low = "White", high = "blue") +
+  theme_minimal() +
+  labs(title = "Heatmap of Age vs Favorite Coffee Style",
+       x = "Age", y = "Coffee Style", fill = "Count")
+
+
+```
+
+Chi-squared analysis for Cups per day vs Cafe Satisfaction
+```{R}
+chi2 <- chisq.test(df$CupsFactor, df$CafeValueSatisfaction)
+print(chi2)
+
+table(df$CupsFactor, df$CafeValueSatisfaction)
+
+# Create a contingency table for Age and Cafe Satisfaction
+CupsCafe <- df %>%
+  group_by(CupsFactor, CafeValueSatisfaction) %>%
+  summarise(Count = n()) %>%
+  ungroup()
+
+
+# Plot the heatmap
+ggplot(CupsCafe, aes(x = CupsFactor, y = CafeValueSatisfaction, fill = Count)) +
+  geom_tile() +
+  scale_fill_gradient(low = "White", high = "blue") +
+  theme_minimal() +
+  labs(title = "Heatmap of Cups Per Day vs Cafe Satisfaction",
+       x = "Cups Per Day", y = "Cafe Satisfaction", fill = "Count")
+
+
+```
+
+Chi-squared analysis for multiple variables
+```{R}
+# List of variable pairs to test
+variable_pairs <- list(
+  c("Age", "MaxWillingFactor"),
+  c("Origin", "MaxWillingFactor"),
+  c("Roast", "MaxWillingFactor"),
+  c("CafeValueSatisfaction", "MaxWillingFactor"),
+  c("Age", "MaxSpentFactor"),
+  c("Origin", "MaxSpentFactor"),
+  c("Roast", "MaxSpentFactor"),
+  c("CafeValueSatisfaction", "MaxSpentFactor"),
+  c("Age", "Strength"),
+  c("Age", "Roast"),
+  c("Age", "Origin"),
+  c("Origin", "Roast"),
+  c("Origin", "FavoriteDrink"),
+  c("Origin", "Employment"),
+  c("Employment", "FavoriteDrink"),
+  c("Employment", "Strength"),
+  c("Origin", "CafeValueSatisfaction"),
+  c("Roast", "CafeValueSatisfaction")
+)
+
+# Function to run Chi-squared tests and store results
+run_chi_squared_tests <- function(df, variable_pairs) {
+  results <- matrix(ncol = 3, nrow = length(variable_pairs))
+  colnames(results) <- c("Variable Pair", "Chi-Squared Statistic", "p-value")
+  
+  # Loop through each pair
+  for (i in 1:length(variable_pairs)) {
+    var1 <- variable_pairs[[i]][1]
+    var2 <- variable_pairs[[i]][2]
+    
+    # Create contingency table
+    contingency_table <- table(df[[var1]], df[[var2]])
+    
+    # Perform Chi-squared test
+    chi_test <- chisq.test(contingency_table)
+    
+    # Store the results
+    results[i, 1] <- paste(var1, "vs", var2)
+    results[i, 2] <- chi_test$statistic
+    results[i, 3] <- chi_test$p.value
+  }
+  
+  return(results)
+}
+
+# Run the Chi-squared tests and store the results
+chi_results <- run_chi_squared_tests(df, variable_pairs)
+
+# Print the results
+print(chi_results)
+
+```
+
+Visualization 5: Cups Per Day vs Cafe Satisfaction
+```{R}
+# Create the stacked bar chart
+ggplot(df, aes(x = CupsFactor, fill = CafeValueSatisfaction)) + 
+  geom_bar(position = "fill", width = 0.7) + # "fill" stacks the bars proportionally
+  scale_fill_manual(values = c("No" = "lightblue", "Yes" = "darkblue")) + # Custom colors
+  labs(
+    title = "Proportion of Cafe Value Satisfaction by Cups per Day",
+    x = "Cups per Day (CupsFactor)",
+    y = "Proportion",
+    fill = "Satisfaction"
+  ) + 
+  theme_minimal() + 
+  theme(
+    plot.title = element_text(face = "bold", size = 14, hjust = 0.5),
+    axis.title.x = element_text(size = 12),
+    axis.title.y = element_text(size = 12),
+    axis.text = element_text(size = 10)
+  )
+
+
+```
+
+Linear Model 1
+```{R}
+Model1 <- lm(MaxWillingPer ~ NAge + Origin + CupsPerDay + Roast, df)
+summary(Model1)
+plot(Model1)
+
+# Plot residuals vs fitted values
+plot(Model1$fitted.values, Model1$residuals, 
+     xlab = "Fitted values", ylab = "Residuals", 
+     main = "Residuals vs Fitted")
+abline(h = 0, col = "red")
+
+
+```
+
+Model 2:
+```{R}
+Model2 <- lm(MaxWillingPer ~ log(MaxSpentPer) + log(NAge) + Origin + log(CupsPerDay + 1), df)
+summary(Model2)
+plot(Model2)
+```
+
+Model 3:
+```{R}
+Model3 <- lm(MaxWillingPer ~ sqrt(MaxSpentPer) + sqrt(NAge) + Origin + sqrt(CupsPerDay + 1), df)
+summary(Model3)
+plot(Model3)
+```
+
+Model 4:
+```{R}
+Model1_glm <- glm(MaxWillingPer ~ MaxSpentPer + NAge + Origin + CupsPerDay, 
+                  data = df, family = Gamma(link = "log"))
+summary(Model1_glm)
+plot(Model1_glm)
+
+```
+
+Model 1 Outlier Adjustment:
+```{R}
+library(ggplot2)
+
+# Identify outliers using IQR method
+Q1 <- quantile(df$MaxWillingPer, 0.25)
+Q3 <- quantile(df$MaxWillingPer, 0.75)
+IQR <- Q3 - Q1
+lower_bound <- Q1 - 1.5 * IQR
+upper_bound <- Q3 + 1.5 * IQR
+outliers_iqr <- which(df$MaxWillingPer < lower_bound | df$MaxWillingPer > upper_bound)
+
+cat("Outliers detected by IQR method: ", outliers_iqr, "\n")
+
+#Remove outliers based on IQR 
+df_cleaned_iqr <- df[df$MaxWillingPer >= lower_bound & df$MaxWillingPer <= upper_bound, ]
+(using the cleaned dataset)
+Model1_cleaned_iqr <- lm(MaxWillingPer ~ MaxSpentPer + NAge + Origin + CupsPerDay + Roast, data = df_cleaned_iqr)
+summary(Model1_cleaned_iqr)
+
+```
+
+Robut Regression:
+```{R}
+library(MASS)
+
+Model1_robust <- rlm(MaxWillingPer ~ MaxSpentPer + NAge + Origin + CupsPerDay, data = df)
+summary(Model1_robust)
+
+# Plot residuals vs fitted values
+plot(Model1_robust$fitted.values, Model1_robust$residuals, 
+     xlab = "Fitted values", ylab = "Residuals", 
+     main = "Residuals vs Fitted")
+abline(h = 0, col = "red")
+
+
+```
+
+Logit Model 1:
+```{R}
+Logit1 <- glm(CafeValueSatisfaction ~ CupsFactor, 
+             family = binomial, 
+             data = df)
+
+summary(Logit1)
+```
+
+Poisson Model 1
+```{R}
+model <- glm(MaxWillingPer ~ CupsFactor + Age + MaxSpentPer + Expertise, 
+             family = poisson, 
+             data = df)
+
+# Check the model summary
+summary(model)
+
+```
+
+
+
+
+
+
+
+
+
